@@ -307,7 +307,7 @@ func printTime(result algorithmResult) {
 func main() {
 	seed := flag.Int64("seed", 42, "Set RNG seed")
 	goroutines := flag.Int("goroutines", 100, "Amount of goroutines")
-	vectorDim := flag.Int("dim", 999_999_999, "Array Dimension, x")
+	vectorDim := flag.Int("dim", 1_000_000, "Array Dimension, x")
 	algorithm := flag.String("algorithm", "all", "Select Algorithm: cosine | pearson | jaccard | all")
 
 	flag.Parse()
@@ -372,11 +372,11 @@ func main() {
 		algoRes.algorithm = "pearson"
 
 		t0 = time.Now()
-		algoRes.answerSeq = cosineSeq(pairs)
+		algoRes.answerSeq = pearsonSeq(pairs)
 		algoRes.timeSeq = time.Since(t0)
 
 		t0 = time.Now()
-		algoRes.answerCon = cosineCon(pairs)
+		algoRes.answerCon = pearsonCon(pairs)
 		algoRes.timeCon = time.Since(t0)
 
 		printTime(algoRes)
