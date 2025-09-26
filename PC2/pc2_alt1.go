@@ -4,9 +4,22 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
-	"sync"
+	"runtime"
 	"time"
 )
+
+//Estructura que define el trabajo -> input
+type Job struct {
+	id int
+	a []float64
+	b []float64
+}
+
+type Result struct{
+	id int
+	score float64
+	metric string
+}
 
 func throwPanic(lenVecA, lenVecB int) {
 	if lenVecA != lenVecB {
@@ -87,17 +100,59 @@ func makeRandomVector(n int, max float64) []float64 {
 	return v
 }
 
+func worker(id int, tasks <- chan Job, results chan <- Result){
+	for job := range tasks{
+		scoreC := cosineSimilarity(job.a, job.b)
+		scoreP := pearsonCorrelation(job.a, job.b)
+		scoreJ := jaccardIndex(job.a, job.b)
+		results <- Result{id: job.id, score: scoreC, metric : "Cosine"}
+		results <- Result{id: job.id, score: scoreP, metric : "Pearson"}
+		results <- Result{id: job.id, score: scoreJ, metric : "Jaccard"}
+
+	}
+}
+
+
 func main() {
+	rand.Seed(time.Now().UnixNano())
+	//Usamos todos los cores de la CPU
+	numWorkers := runtime.NumCPU()
+	numTasks := 6
+
 	vecA := makeRandomVector(1000000, 3.0)
 	vecB := makeRandomVector(1000000, 4.0)
 	jaccardA := make([]float64, 1000000)
 	jaccardB := make([]float64, 1000000)
+
 	for i := range jaccardA {
 		jaccardA[i] = float64(rand.Intn(2))
 		jaccardB[i] = float64(rand.Intn(2))
 	}
 
-	var wg sync.WaitGroup
+	startC := time.Now()
+
+	tasks := make(chan Job, numWorkers)
+	results := make(chan Result, numTasks * 3)
+
+	for i := 0; i < numWorkers; i++ {
+	    go worker(i, tasks, results)
+	}	
+	
+	for j := 0; j < numTasks; j++ {
+		tasks <- Job{id:j, a:vecA, b:vecB}
+	}	
+		
+	close(tasks)
+
+    for k := 1; k <= numTasks * 3; k++ {
+        result := <-results
+	fmt.Printf("Result: job=%d, score=%f, metric=%s\n", result.id, result.score, result.metric)
+    }
+
+	elapsedC := time.Since(startC)
+	fmt.Printf("Tiempo transcurrido (concurrente): %f\n", elapsedC.Seconds())
+
+
 
 	start := time.Now()
 	jaccardIndexVal := jaccardIndex(jaccardA, jaccardB)
@@ -111,28 +166,8 @@ func main() {
 	elapsed := time.Since(start)
 	fmt.Printf("Tiempo transcurrido (secuencial): %f\n", elapsed.Seconds())
 
-	startC := time.Now()
 
-	wg.Add(3)
 
-	go func() {
-		defer wg.Done()
-		jaccardIndexVal = jaccardIndex(jaccardA, jaccardB)
-	}()
-	go func() {
-		defer wg.Done()
-		similarity = cosineSimilarity(vecA, vecB)
-	}()
-	go func() {
-		defer wg.Done()
-		pearson = pearsonCorrelation(vecA, vecB)
-	}()
-
-	wg.Wait()
-
-	elapsedC := time.Since(startC)
-
-	fmt.Printf("Tiempo transcurrido (concurrente): %f\n", elapsedC.Seconds())
 
 	fmt.Printf("Speedup: %f\n", elapsed.Seconds()/elapsedC.Seconds())
 
