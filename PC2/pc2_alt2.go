@@ -16,6 +16,14 @@ type Pairs struct {
 	vectorB []int64
 }
 
+type algorithmResult struct {
+	algorithm string
+	timeSeq   time.Duration
+	answerSeq float64
+	timeCon   time.Duration
+	answerCon float64
+}
+
 func fillVector(vectorDim int, universe int, r *rand.Rand) []int64 {
 	vector := make([]int64, vectorDim)
 
@@ -259,8 +267,8 @@ func jaccardCon(pair Pairs) float64 {
 			for _, x := range pair.vectorA[start:end] {
 				setA[x] = struct{}{}
 			}
-			for _, y := range pair.vectorA[start:end] {
-				setA[y] = struct{}{}
+			for _, y := range pair.vectorB[start:end] {
+				setB[y] = struct{}{}
 			}
 
 			inter := 0
@@ -289,11 +297,18 @@ func jaccardCon(pair Pairs) float64 {
 
 }
 
+func printTime(result algorithmResult) {
+	fmt.Printf("%s Seq %f \n", result.algorithm, result.answerSeq)
+	fmt.Printf("Time duration %v \n", result.timeSeq)
+	fmt.Printf("%s Con %f \n", result.algorithm, result.answerCon)
+	fmt.Printf("Time duration %v \n \n", result.timeCon)
+}
+
 func main() {
 	seed := flag.Int64("seed", 42, "Set RNG seed")
 	goroutines := flag.Int("goroutines", 100, "Amount of goroutines")
 	vectorDim := flag.Int("dim", 999_999_999, "Array Dimension, x")
-	algorithm := flag.String("algorithm", "cosine", "Select Algorithm: cosine | pearson | jaccard")
+	algorithm := flag.String("algorithm", "all", "Select Algorithm: cosine | pearson | jaccard | all")
 
 	flag.Parse()
 
@@ -303,50 +318,80 @@ func main() {
 
 	pairs := fillPairs(*vectorDim, universe, *seed)
 
+	var algoRes algorithmResult
 	switch *algorithm {
 	case "cosine":
-		t0 := time.Now()
-		cseq := float64(cosineSeq(pairs))
+		algoRes.algorithm = *algorithm
 
-		fmt.Printf("Cosine Seq %f \n", cseq)
-		tSeq := time.Since(t0)
-		fmt.Printf("Time duration %v \n", tSeq)
+		t0 := time.Now()
+		algoRes.answerSeq = cosineSeq(pairs)
+		algoRes.timeSeq = time.Since(t0)
 
 		t0 = time.Now()
-		cseq = float64(cosineCon(pairs))
+		algoRes.answerCon = cosineCon(pairs)
+		algoRes.timeCon = time.Since(t0)
 
-		fmt.Printf("Cosine Con %f \n", cseq)
-		tSeq = time.Since(t0)
-		fmt.Printf("Time duration %v \n", tSeq)
-
+		printTime(algoRes)
 	case "pearson":
-		t0 := time.Now()
-		cseq := float64(pearsonSeq(pairs))
+		algoRes.algorithm = *algorithm
 
-		fmt.Printf("Pearson Seq %f \n", cseq)
-		tSeq := time.Since(t0)
-		fmt.Printf("Time duration %v \n", tSeq)
+		t0 := time.Now()
+		algoRes.answerSeq = pearsonSeq(pairs)
+		algoRes.timeSeq = time.Since(t0)
 
 		t0 = time.Now()
-		cseq = float64(pearsonCon(pairs))
+		algoRes.answerCon = pearsonCon(pairs)
+		algoRes.timeCon = time.Since(t0)
 
-		fmt.Printf("Pearson Con %f \n", cseq)
-		tSeq = time.Since(t0)
-		fmt.Printf("Time duration %v \n", tSeq)
+		printTime(algoRes)
 	case "jaccard":
-		t0 := time.Now()
-		cseq := float64(jaccardSeq(pairs))
+		algoRes.algorithm = *algorithm
 
-		fmt.Printf("Jaccard Seq %f \n", cseq)
-		tSeq := time.Since(t0)
-		fmt.Printf("Time duration %v \n", tSeq)
+		t0 := time.Now()
+		algoRes.answerSeq = jaccardCon(pairs)
+		algoRes.timeSeq = time.Since(t0)
 
 		t0 = time.Now()
-		cseq = float64(pearsonCon(pairs))
+		algoRes.answerCon = jaccardCon(pairs)
+		algoRes.timeCon = time.Since(t0)
 
-		fmt.Printf("Jaccard Con %f \n", cseq)
-		tSeq = time.Since(t0)
-		fmt.Printf("Time duration %v \n", tSeq)
+		printTime(algoRes)
+	case "all":
+		algoRes.algorithm = "cosine"
+
+		t0 := time.Now()
+		algoRes.answerSeq = cosineSeq(pairs)
+		algoRes.timeSeq = time.Since(t0)
+
+		t0 = time.Now()
+		algoRes.answerCon = cosineCon(pairs)
+		algoRes.timeCon = time.Since(t0)
+
+		printTime(algoRes)
+
+		algoRes.algorithm = "pearson"
+
+		t0 = time.Now()
+		algoRes.answerSeq = cosineSeq(pairs)
+		algoRes.timeSeq = time.Since(t0)
+
+		t0 = time.Now()
+		algoRes.answerCon = cosineCon(pairs)
+		algoRes.timeCon = time.Since(t0)
+
+		printTime(algoRes)
+
+		algoRes.algorithm = "jaccard"
+
+		t0 = time.Now()
+		algoRes.answerSeq = jaccardSeq(pairs)
+		algoRes.timeSeq = time.Since(t0)
+
+		t0 = time.Now()
+		algoRes.answerCon = jaccardCon(pairs)
+		algoRes.timeCon = time.Since(t0)
+
+		printTime(algoRes)
 
 	default:
 		print("Tipo de algoritmo incorrecto")
