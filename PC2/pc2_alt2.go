@@ -1,19 +1,26 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"math"
 	"math/rand"
-	"sync"
+	"runtime"
 	"time"
 )
 
-var amountGoroutines = 150
+type ProgramInfo struct {
+	amountGoroutines int
+	universe         int
+	seed             int64
+}
 
 type Pairs struct {
-	vectorA []int64
-	vectorB []int64
+	user  []int64
+	games [][]int64
+
+	rows, columns int
 }
 
 type algorithmResult struct {
@@ -24,277 +31,217 @@ type algorithmResult struct {
 	answerCon float64
 }
 
-func fillVector(vectorDim int, universe int, r *rand.Rand) []int64 {
-	vector := make([]int64, vectorDim)
+func fillUser(cols, universe int, r *rand.Rand) []int64 {
+	user := make([]int64, cols)
 
-	for i := 0; i < vectorDim; i++ {
-		vector[i] = int64(r.Intn(universe))
+	for i := range user {
+		user[i] = int64(r.Intn(universe))
 	}
 
-	return vector
+	return user
 }
 
-func fillPairs(vectorDim int, universe int, seed int64) Pairs {
-	var a, b []int64
-	var wg sync.WaitGroup
+func fillGames(rows, cols, universe int, r *rand.Rand) [][]int64 {
+	games := make([][]int64, rows)
 
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		r := rand.New(rand.NewSource(seed))
-		a = fillVector(vectorDim, universe, r)
-	}()
-	go func() {
-		defer wg.Done()
-		r := rand.New(rand.NewSource(seed + 100))
-		b = fillVector(vectorDim, universe, r)
-	}()
-	wg.Wait()
+	for i := 0; i < rows; i++ {
+		row := make([]int64, cols)
+		for j := range row {
+			row[j] = int64(r.Intn(universe))
+		}
+		games[i] = row
+	}
 
-	return Pairs{vectorA: a, vectorB: b}
+	return games
 }
+
+//func fillPairs(programInfo ProgramInfo, pairs *Pairs) {
+//	var wg sync.WaitGroup
+//
+//	wg.Add(2)
+//	go func() {
+//		defer wg.Done()
+//		r := rand.New(rand.NewSource(int64(programInfo.seed)))
+//		pairs.user = fillTensorR1(pairs.columns, programInfo.universe, r)
+//	}()
+//	go func() {
+//		defer wg.Done()
+//		r := rand.New(rand.NewSource(int64(programInfo.seed) + 100))
+//		pairs.games = fillTensorR2(pairs.rows, pairs.columns, programInfo.universe, r)
+//	}()
+//	wg.Wait()
+//}
 
 func sumArray(numArray []int64) float64 {
-	total := int64(0)
-
+	var sum int64
 	for _, num := range numArray {
-		total += num
+		sum += num
 	}
-
-	return float64(total)
+	return float64(sum)
 }
 
 func sumSquareArray(numArray []int64) float64 {
-	total := int64(0)
-
+	var sum int64
 	for _, num := range numArray {
-		total += num * num
+		sum += num * num
 	}
-
-	return float64(total)
+	return float64(sum)
 }
 
-func sumDotProduct(numArrayA []int64, numArrayB []int64) float64 {
-	total := int64(0)
+func dotProduct(numArrayA, numArrayB []int64) float64 {
+	dot := int64(0)
 
 	for i := 0; i < len(numArrayA); i++ {
-		total += numArrayA[i] * numArrayB[i]
+		dot += numArrayA[i] * numArrayB[i]
 	}
 
-	return float64(total)
+	return float64(dot)
 }
 
-func sumArrayConcurrent(pairArray []int64) float64 {
-	num_chunks := amountGoroutines
-	sum := make([]int64, num_chunks)
-
-	var wg sync.WaitGroup
-	wg.Add(amountGoroutines)
-
-	chunkSize := (len(pairArray) + num_chunks - 1) / num_chunks
-
-	for i := 0; i < num_chunks; i++ {
-		go func(i int) {
-			defer wg.Done()
-			start := i * chunkSize
-			end := (i + 1) * chunkSize
-
-			if end > len(pairArray) {
-				end = len(pairArray)
-			}
-
-			sum[i] = int64(sumArray(pairArray[start:end]))
-		}(i)
-	}
-
-	wg.Wait()
-
-	return sumArray(sum)
-}
-
-func sumSquareArrayConcurrent(pairArray []int64) float64 {
-	num_chunks := amountGoroutines
-	sum := make([]int64, num_chunks)
-
-	var wg sync.WaitGroup
-	wg.Add(amountGoroutines)
-
-	chunkSize := (len(pairArray) + num_chunks - 1) / num_chunks
-
-	for i := 0; i < num_chunks; i++ {
-		go func(i int) {
-			defer wg.Done()
-			start := i * chunkSize
-			end := (i + 1) * chunkSize
-
-			if end > len(pairArray) {
-				end = len(pairArray)
-			}
-
-			sum[i] = int64(sumSquareArray(pairArray[start:end]))
-		}(i)
-	}
-
-	wg.Wait()
-
-	return sumArray(sum)
-}
-
-func sumDotProductConcurrent(pairArrayA []int64, pairArrayB []int64) float64 {
-	num_chunks := amountGoroutines
-	sum := make([]int64, num_chunks)
-
-	var wg sync.WaitGroup
-	wg.Add(amountGoroutines)
-
-	chunkSize := (len(pairArrayA) + num_chunks - 1) / num_chunks
-
-	for i := 0; i < num_chunks; i++ {
-		go func(i int) {
-			defer wg.Done()
-			start := i * chunkSize
-			end := (i + 1) * chunkSize
-
-			if end > len(pairArrayA) {
-				end = len(pairArrayA)
-			}
-
-			sum[i] = int64(sumDotProduct(pairArrayA[start:end], pairArrayB[start:end]))
-		}(i)
-	}
-
-	wg.Wait()
-
-	return sumArray(sum)
-}
-
-func cosineSeq(pair Pairs) float64 {
-	dotProduct := sumDotProduct(pair.vectorA, pair.vectorB)
-	nA := math.Sqrt(sumSquareArray(pair.vectorA))
-	nB := math.Sqrt(sumSquareArray(pair.vectorB))
+func cosine(user []int64, game []int64) float64 {
+	dotProduct := dotProduct(user, game)
+	nA := math.Sqrt(sumSquareArray(user))
+	nB := math.Sqrt(sumSquareArray(game))
 
 	return dotProduct / (nA * nB)
 }
 
-func cosineCon(pair Pairs) float64 {
-	dotProduct := sumDotProductConcurrent(pair.vectorA, pair.vectorB)
-	nA := math.Sqrt(sumSquareArrayConcurrent(pair.vectorA))
-	nB := math.Sqrt(sumSquareArrayConcurrent(pair.vectorB))
+func pearson(user []int64, game []int64) float64 {
+	dotProduct := dotProduct(user, game)
+	sumA := sumArray(user)
+	sumB := sumArray(game)
+	sum2A := sumSquareArray(user)
+	sum2B := sumSquareArray(game)
 
-	return dotProduct / (nA * nB)
-}
-
-func pearsonSeq(pair Pairs) float64 {
-	dotProduct := sumDotProduct(pair.vectorA, pair.vectorB)
-	sumA := sumArray(pair.vectorA)
-	sumB := sumArray(pair.vectorB)
-	sum2A := sumSquareArray(pair.vectorA)
-	sum2B := sumSquareArray(pair.vectorB)
-
-	lenVector := float64(len(pair.vectorA))
+	lenVector := float64(len(user))
 
 	return (lenVector*dotProduct - sumA*sumB) / math.Sqrt((lenVector*sum2A-sumA*sumA)*(lenVector*sum2B-sumB*sumB))
 }
 
-func pearsonCon(pair Pairs) float64 {
-	dotProduct := sumDotProductConcurrent(pair.vectorA, pair.vectorB)
-	sumA := sumArrayConcurrent(pair.vectorA)
-	sumB := sumArrayConcurrent(pair.vectorB)
-	sum2A := sumSquareArrayConcurrent(pair.vectorA)
-	sum2B := sumSquareArrayConcurrent(pair.vectorB)
-
-	lenVector := float64(len(pair.vectorA))
-
-	return (lenVector*dotProduct - sumA*sumB) / math.Sqrt((lenVector*sum2A-sumA*sumA)*(lenVector*sum2B-sumB*sumB))
-}
-
-func jaccardSeq(pair Pairs) float64 {
-	union := make(map[int64]struct{})
-	intersection := make(map[int64]struct{})
-
+func jaccard(user []int64, game []int64) float64 {
 	setA := make(map[int64]struct{})
 	setB := make(map[int64]struct{})
 
-	for _, num := range pair.vectorA {
+	for _, num := range user {
 		setA[num] = struct{}{}
 	}
 
-	for _, num := range pair.vectorB {
+	for _, num := range game {
 		setB[num] = struct{}{}
 	}
 
-	for number := range setA {
-		union[number] = struct{}{}
-		if _, found := setB[number]; found {
-			intersection[number] = struct{}{}
+	intersection := 0
+	for x := range setA {
+		if _, found := setB[x]; found {
+			intersection++
 		}
 	}
 
-	for number := range setB {
-		union[number] = struct{}{}
-	}
+	union := len(setA) + len(setB) - intersection
 
-	if len(union) == 0 {
-		return 0.0
-	}
-	return float64(len(intersection)) / float64(len(union))
+	return float64(intersection) / float64(union)
 }
 
-func jaccardCon(pair Pairs) float64 {
-	n := len(pair.vectorA)
-	numChunks := amountGoroutines
-
-	chunkSize := (n + numChunks - 1) / numChunks
-
-	type counts struct{ inter, cardA, cardB int }
-	partial := make([]counts, numChunks)
-
-	var wg sync.WaitGroup
-	wg.Add(numChunks)
-
-	for i := 0; i < numChunks; i++ {
-		go func(i int) {
-			defer wg.Done()
-			start := i * chunkSize
-			end := (i + 1) * chunkSize
-			if end > n {
-				end = n
-			}
-
-			setA := make(map[int64]struct{})
-			setB := make(map[int64]struct{})
-
-			for _, x := range pair.vectorA[start:end] {
-				setA[x] = struct{}{}
-			}
-			for _, y := range pair.vectorB[start:end] {
-				setB[y] = struct{}{}
-			}
-
-			inter := 0
-			for x := range setA {
-				if _, ok := setB[x]; ok {
-					inter++
-				}
-			}
-			partial[i] = counts{inter: inter, cardA: len(setA), cardB: len(setB)}
-		}(i)
+func cosineSeq(pairs *Pairs) []result {
+	results := make([]result, pairs.rows)
+	for i := 0; i < pairs.rows; i++ {
+		game := pairs.games[i]
+		results = append(results, result{index: i, value: cosine(pairs.user, game)})
 	}
-	wg.Wait()
+	return results
+}
 
-	inter, cardA, cardB := 0, 0, 0
-	for _, c := range partial {
-		inter += c.inter
-		cardA += c.cardA
-		cardB += c.cardB
+func pearsonSeq(pairs *Pairs) []result {
+	results := make([]result, pairs.rows)
+	for i := 0; i < pairs.rows; i++ {
+		game := pairs.games[i]
+		results = append(results, result{index: i, value: pearson(pairs.user, game)})
 	}
+	return results
+}
 
-	union := cardA + cardB - inter
-	if union == 0 {
-		return 0
+func jaccardSeq(pairs *Pairs) []result {
+	results := make([]result, pairs.rows)
+	for i := 0; i < pairs.rows; i++ {
+		game := pairs.games[i]
+		results = append(results, result{index: i, value: jaccard(pairs.user, game)})
 	}
-	return float64(inter) / float64(union)
+	return results
+}
 
+func cosineCon(pairs *Pairs) []result  { return computeCon(pairs, cosine) }
+func pearsonCon(pairs *Pairs) []result { return computeCon(pairs, pearson) }
+func jaccardCon(pairs *Pairs) []result { return computeCon(pairs, jaccard) }
+
+type job struct {
+	index int
+	game  []int64
+}
+
+type result struct {
+	index int
+	value float64
+}
+
+func gen(ctx context.Context, p *Pairs) <-chan job {
+	ch := make(chan job)
+	go func() {
+		defer close(ch)
+		for i := 0; i < p.rows; i++ {
+			select {
+			case <-ctx.Done():
+				return
+			case ch <- job{index: i, game: p.games[i]}:
+			}
+		}
+	}()
+	return ch
+}
+
+func workerMetric(
+	ctx context.Context,
+	user []int64,
+	in <-chan job,
+	out chan<- result,
+	metric func([]int64, []int64) float64,
+) {
+	for j := range in {
+		r := result{index: j.index, value: metric(user, j.game)}
+		select {
+		case <-ctx.Done():
+			return
+		case out <- r:
+		}
+	}
+}
+
+func computeCon(pairs *Pairs, metric func([]int64, []int64) float64) []result {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	jobs := gen(ctx, pairs)
+	workers := runtime.NumCPU()
+
+	out := make(chan result)
+	go func() {
+		defer close(out)
+		done := make(chan struct{}, workers)
+		for i := 0; i < workers; i++ {
+			go func() {
+				workerMetric(ctx, pairs.user, jobs, out, metric)
+				done <- struct{}{}
+			}()
+		}
+		for i := 0; i < workers; i++ {
+			<-done
+		}
+	}()
+
+	res := make([]result, pairs.rows)
+	for r := range out {
+		res[r.index] = r
+	}
+	return res
 }
 
 func printTime(result algorithmResult) {
@@ -304,19 +251,32 @@ func printTime(result algorithmResult) {
 	fmt.Printf("Time duration %v \n \n", result.timeCon)
 }
 
+func mean(data []result) float64 {
+	var sum float64
+	for i := 0; i < len(data); i++ {
+		sum += data[i].value
+	}
+
+	return sum / float64(len(data))
+}
+
 func main() {
 	seed := flag.Int64("seed", 42, "Set RNG seed")
-	goroutines := flag.Int("goroutines", 100, "Amount of goroutines")
-	vectorDim := flag.Int("dim", 1_000_000, "Array Dimension, x")
+	//goroutines := flag.Int("goroutines", 100, "Amount of goroutines")
+	rowsDim := flag.Int("row_dim", 1_000, "Row shape, x")
+	colsDim := flag.Int("col_dim", 1_000, "Col shape, x")
 	algorithm := flag.String("algorithm", "all", "Select Algorithm: cosine | pearson | jaccard | all")
 
 	flag.Parse()
 
-	amountGoroutines = *goroutines
+	pairs := &Pairs{
+		rows:    *rowsDim,
+		columns: *colsDim,
+		games:   fillGames(*rowsDim, *colsDim, int(math.Max(float64(*rowsDim), float64(*colsDim))), rand.New(rand.NewSource(*seed))),
+		user:    fillUser(*colsDim, int(math.Max(float64(*rowsDim), float64(*colsDim))), rand.New(rand.NewSource(*seed))),
+	}
 
-	var universe int = 10000
-
-	pairs := fillPairs(*vectorDim, universe, *seed)
+	//programInfo := ProgramInfo{amountGoroutines: *goroutines, seed: int64(*seed), universe: int(math.Max(float64(*rowsDim), float64(*colsDim)))}
 
 	var algoRes algorithmResult
 	switch *algorithm {
@@ -324,11 +284,11 @@ func main() {
 		algoRes.algorithm = *algorithm
 
 		t0 := time.Now()
-		algoRes.answerSeq = cosineSeq(pairs)
+		algoRes.answerSeq = mean(cosineSeq(pairs))
 		algoRes.timeSeq = time.Since(t0)
 
 		t0 = time.Now()
-		algoRes.answerCon = cosineCon(pairs)
+		algoRes.answerSeq = mean(cosineCon(pairs))
 		algoRes.timeCon = time.Since(t0)
 
 		printTime(algoRes)
@@ -336,11 +296,11 @@ func main() {
 		algoRes.algorithm = *algorithm
 
 		t0 := time.Now()
-		algoRes.answerSeq = pearsonSeq(pairs)
+		algoRes.answerSeq = mean(pearsonSeq(pairs))
 		algoRes.timeSeq = time.Since(t0)
 
 		t0 = time.Now()
-		algoRes.answerCon = pearsonCon(pairs)
+		algoRes.answerCon = mean(pearsonCon(pairs))
 		algoRes.timeCon = time.Since(t0)
 
 		printTime(algoRes)
@@ -348,11 +308,11 @@ func main() {
 		algoRes.algorithm = *algorithm
 
 		t0 := time.Now()
-		algoRes.answerSeq = jaccardCon(pairs)
+		algoRes.answerSeq = mean(jaccardSeq(pairs))
 		algoRes.timeSeq = time.Since(t0)
 
 		t0 = time.Now()
-		algoRes.answerCon = jaccardCon(pairs)
+		algoRes.answerCon = mean(jaccardCon(pairs))
 		algoRes.timeCon = time.Since(t0)
 
 		printTime(algoRes)
@@ -360,11 +320,11 @@ func main() {
 		algoRes.algorithm = "cosine"
 
 		t0 := time.Now()
-		algoRes.answerSeq = cosineSeq(pairs)
+		algoRes.answerSeq = mean(cosineSeq(pairs))
 		algoRes.timeSeq = time.Since(t0)
 
 		t0 = time.Now()
-		algoRes.answerCon = cosineCon(pairs)
+		algoRes.answerCon = mean(cosineCon(pairs))
 		algoRes.timeCon = time.Since(t0)
 
 		printTime(algoRes)
@@ -372,11 +332,11 @@ func main() {
 		algoRes.algorithm = "pearson"
 
 		t0 = time.Now()
-		algoRes.answerSeq = pearsonSeq(pairs)
+		algoRes.answerSeq = mean(pearsonSeq(pairs))
 		algoRes.timeSeq = time.Since(t0)
 
 		t0 = time.Now()
-		algoRes.answerCon = pearsonCon(pairs)
+		algoRes.answerCon = mean(pearsonCon(pairs))
 		algoRes.timeCon = time.Since(t0)
 
 		printTime(algoRes)
@@ -384,11 +344,11 @@ func main() {
 		algoRes.algorithm = "jaccard"
 
 		t0 = time.Now()
-		algoRes.answerSeq = jaccardSeq(pairs)
+		algoRes.answerSeq = mean(jaccardSeq(pairs))
 		algoRes.timeSeq = time.Since(t0)
 
 		t0 = time.Now()
-		algoRes.answerCon = jaccardCon(pairs)
+		algoRes.answerCon = mean(jaccardCon(pairs))
 		algoRes.timeCon = time.Since(t0)
 
 		printTime(algoRes)
